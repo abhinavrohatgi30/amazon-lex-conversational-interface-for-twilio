@@ -20,6 +20,8 @@ import threading
 import time
 import requests
 import os
+import json
+from base64 import b64encode
 
 class LexClientStreaming:
     AUDIO_CONTENT_TYPE = 'audio/lpcm; sample-rate=8000; sample-size-bits=16; channel-count=1; is-big-endian=false'
@@ -34,6 +36,7 @@ class LexClientStreaming:
     }
 
     def __init__(self, user_id, content_type=AUDIO_CONTENT_TYPE, stage="lex"):
+        logging.basicConfig()
         self.logger = logging.getLogger(__name__)
         self.region = self.lex_config["Region"]
         self.access_key = self.lex_config["AccessKeyId"]
@@ -54,8 +57,9 @@ class LexClientStreaming:
         self.request_thread = None
 
     # add data if stream is not closed. no-op otherwise
-    def add_to_stream(self, data):
+    def add_to_stream(self, data, session_attributes={}):
 
+        self.session_attributes = session_attributes
         # start a connection first time we see that data is added to stream
         if self.request_thread is None:
             self.request_thread = threading.Thread(target=self.run)
@@ -116,6 +120,7 @@ class LexClientStreaming:
         headers = {}
         user_id = self.lex_user_id
         content_type = self.content_type
+        session_attributes = self.session_attributes
         data_type = "content"
         payload_hash = "UNSIGNED-PAYLOAD"
         headers['x-amz-content-sha256'] = "UNSIGNED-PAYLOAD"
@@ -192,11 +197,15 @@ class LexClientStreaming:
         headers['Content-Type'] = content_type
         headers['X-Amz-Date'] = amz_date
         headers['Authorization'] = authorization_header
+        session_attributes_json = json.dumps(session_attributes)
+        print("Lex Session Attributes {} ".format(session_attributes_json))
+        headers['x-amz-lex-session-attributes'] = b64encode(session_attributes_json)
 
         # ************* SEND THE REQUEST *************
-        self.logger.debug("Calling Lex to stream data, endpoint: %s", self.endpoint)
+        print("Calling Lex to stream data, endpoint: %s", self.endpoint)
         self.response = requests.post(self.endpoint + canonical_uri, data=self.stream_iterator(), headers=headers)
-        self.logger.info("Lex response headers %s ", self.response.headers)
+        print("Lex response headers %s ", self.response.headers)
+        print("Lex response content %s ", self.response.text)
 
     # Key derivation functions.
     # See: http://docs.aws.amazon.com/general/latest/gr/signature-v4-examples.html#signature-v4-examples-python

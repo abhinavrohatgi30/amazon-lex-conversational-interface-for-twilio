@@ -18,7 +18,7 @@ sockets = Sockets(app)
 updated_twimls = {}
 
 def log(msg, *args):
-    print("Media WS: ", msg, *args)
+    print("Media WS: ", msg)
 
 @app.route("/ping")
 def healthCheckResponse():
@@ -35,11 +35,14 @@ def returnTwimlForCallSid():
 @app.route('/twiml', methods=['POST'])
 def return_twiml():
     print("POST TwiML")
-    return render_template('streams.xml')
+    session_attributes = request.args.to_dict()
+    print("TwiML Session Attributes {} ".format(session_attributes))
+    return render_template('streams.xml',session_attributes=session_attributes,**session_attributes)
 
 @sockets.route('/')
 def echo(ws):
     print("Connection accepted")
+    session_attributes = request.args.to_dict()
     client_data_processor = TwilioDataProcessor(ws)
     client_data_processor.start()
 
@@ -66,6 +69,7 @@ class TwilioDataProcessor:
     def __init__(self, ws):
         self.logger = logging.getLogger(__name__)
         self.ws = ws
+        self.session_attributes = {}
         raw_id = str(uuid.uuid4())
         self.user_id = raw_id[0:24].replace("-", "").upper()
         self.lex_streaming_client = VoiceAndSilenceDetectingLexClient(self.user_id, [self], [self])
@@ -87,10 +91,12 @@ class TwilioDataProcessor:
                     if data['event'] == "start":
                         log("Start Message received", message)
                         print("Media WS: received media and metadata: " + str(data))
+                        self.session_attributes = data["start"].get("customParameters",{})
+                        print("Socket Session Attributes {} ".format(self.session_attributes))
                         self.twilio_call = TwilioCall(data["start"]["accountSid"], data["start"]["callSid"])
 
                     if data['event'] == "media":
-                        self.lex_streaming_client.stream_to_lex(data["media"]["payload"])
+                        self.lex_streaming_client.stream_to_lex(data["media"]["payload"],self.session_attributes)
                     if data['event'] == "closed":
                         log("Closed Message received", message)
                         break
@@ -137,7 +143,7 @@ class TwilioDataProcessor:
         dialog_state = lex_response.get("DialogState")
         intent_name = lex_response.get("IntentName")
 
-        if intent_name is not None and intent_name == "GoodbyeIntent" and dialog_state == "Fulfilled" :
+        if intent_name is not None and dialog_state == "Fulfilled" :
             # hang up the call after this
             response.hangup()
         else:

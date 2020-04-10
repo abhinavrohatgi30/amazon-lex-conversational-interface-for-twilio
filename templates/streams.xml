@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say>You will be interacting with Lex bot in 3, 2, 1. Go.</Say>
+  <Say>Hello {{ candidateName }} , This is not a spam call . I am Shruti from big shift India's trending website for premium engineering jobs. I am reaching out to you to share an opening in companies like Swiggy and Urban clap . Kindly say INTERESTED to proceed and enroll , or else say NOT INTERESTED. If you want to arrange a call back say NEED SUPPORT</Say>
   <Start>
-    <Stream url="wss://<url>/"></Stream>
+    <Stream url="wss://5ffcbec6.ngrok.io/">
+      {% for key, value in session_attributes.iteritems() %}<Parameter name="{{ key }}" value="{{ value }}" />
+      {% endfor %}
+    </Stream>
   </Start>
   <Pause length="40"/>
 </Response>
