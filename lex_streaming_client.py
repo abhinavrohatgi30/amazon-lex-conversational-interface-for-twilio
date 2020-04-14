@@ -21,7 +21,7 @@ import time
 import requests
 import os
 import json
-from base64 import b64encode
+from base64 import b64encode,b64decode
 
 class LexClientStreaming:
     AUDIO_CONTENT_TYPE = 'audio/lpcm; sample-rate=8000; sample-size-bits=16; channel-count=1; is-big-endian=false'
@@ -43,6 +43,7 @@ class LexClientStreaming:
         self.secret_key = self.lex_config["SecretAccessKey"]
         self.bot_name = self.lex_config["BotName"]
         self.bot_alias = self.lex_config["BotAlias"]
+        self.session_attributes = {}
         self.host_name = "runtime.lex.{0}.amazonaws.com".format(self.region)
         self.endpoint = "https://runtime.lex.{0}.amazonaws.com".format(self.region)
         self.service = "lex"
@@ -57,9 +58,7 @@ class LexClientStreaming:
         self.request_thread = None
 
     # add data if stream is not closed. no-op otherwise
-    def add_to_stream(self, data, session_attributes={}):
-
-        self.session_attributes = session_attributes
+    def add_to_stream(self, data):
         # start a connection first time we see that data is added to stream
         if self.request_thread is None:
             self.request_thread = threading.Thread(target=self.run)
@@ -81,6 +80,9 @@ class LexClientStreaming:
             self.logger.debug("waiting for lex connection thread to stop")
             self.request_thread.join()
             self.logger.debug("lex connection thread stopped")
+
+    def set_session_attributes(self,session_attributes={}):
+        self.session_attributes = session_attributes
 
     # check (every X milliseconds) and return new chunk if there is data added to stream
     def stream_iterator(self):
@@ -197,15 +199,16 @@ class LexClientStreaming:
         headers['Content-Type'] = content_type
         headers['X-Amz-Date'] = amz_date
         headers['Authorization'] = authorization_header
-        session_attributes_json = json.dumps(session_attributes)
-        print("Lex Session Attributes {} ".format(session_attributes_json))
-        headers['x-amz-lex-session-attributes'] = b64encode(session_attributes_json)
+
+        if len(session_attributes) > 0 :
+            session_attributes_json = json.dumps(session_attributes)
+            print("Lex Session Attributes {} ".format(session_attributes_json))
+            headers['x-amz-lex-session-attributes'] = b64encode(session_attributes_json.encode("utf-8"))
 
         # ************* SEND THE REQUEST *************
         print("Calling Lex to stream data, endpoint: %s", self.endpoint)
         self.response = requests.post(self.endpoint + canonical_uri, data=self.stream_iterator(), headers=headers)
         print("Lex response headers %s ", self.response.headers)
-        print("Lex response content %s ", self.response.text)
 
     # Key derivation functions.
     # See: http://docs.aws.amazon.com/general/latest/gr/signature-v4-examples.html#signature-v4-examples-python
@@ -228,7 +231,9 @@ class LexClientStreaming:
 
         if self.response.status_code != 200:
             raise Exception("Cannot normalize response as call to Lex did not end with status code 200")
-        
+
+        self.session_attributes = {}
+
         return {"DialogState":self.response.headers.get("x-amz-lex-dialog-state"),
                 "Message":self.response.headers.get("x-amz-lex-message"),
                 "Utterance":self.response.headers.get("x-amz-lex-input-transcript"),

@@ -42,7 +42,11 @@ class VoiceAndSilenceDetectingLexClient:
                                  user_id))
 
 
-    def stream_to_lex(self, base_64_encoded_data, session_attributes={}):
+    def set_session_attributes(self,session_attributes={}):
+        self.lex_client.set_session_attributes(session_attributes)
+
+
+    def stream_to_lex(self, base_64_encoded_data):
         if self.stop_data_processing.is_set():
             self.logger.warn("discarding the passed in data, as underlying lex stream has been stopped")
             return
@@ -72,14 +76,14 @@ class VoiceAndSilenceDetectingLexClient:
                 self.logger.debug("voice detected for first time")
                 self.voice_detected()
             self.last_detected_voice_time = datetime.now()
-            self.lex_client.add_to_stream(raw_audio_data,session_attributes)
+            self.lex_client.add_to_stream(raw_audio_data)
         else:
             self.rms_graph.append(".")
             #self.logger.debug("silence detected in input data")
 
             if self.last_detected_voice_time:
                 # check if elapsed time is greater than configured time for silence
-                self.lex_client.add_to_stream(raw_audio_data,session_attributes)
+                self.lex_client.add_to_stream(raw_audio_data)
 
                 silence_time = (datetime.now() - self.last_detected_voice_time).total_seconds()
                 if silence_time >= self.silence_duration_time:
